@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 from rich.live import Live
 
-from . import __version__, discovery, doctor, session, ui
+from . import __version__, discovery, doctor, launcher, session, state, ui
 
 app = typer.Typer(
     name="ubuntu-cast",
@@ -83,6 +83,21 @@ def start(
     _start_casting(match, audio_only=audio_only)
 
 
+@app.command(name="install-launcher")
+def install_launcher() -> None:
+    """Add an "Ubuntu Cast" launcher to the GNOME app grid."""
+    try:
+        path = launcher.install()
+    except RuntimeError as error:
+        ui.error_console.print(f"Could not install the launcher: {error}")
+        raise typer.Exit(code=1) from error
+    ui.console.print(f"Launcher installed at [bold]{path}[/bold].")
+    ui.console.print(
+        "Search for [bold cyan]Ubuntu Cast[/bold cyan] in the Activities overview "
+        "(right-click it for audio-only)."
+    )
+
+
 @app.command(name="doctor")
 def doctor_command() -> None:
     """Check that this machine is ready to cast (portal, PipeWire, encoders)."""
@@ -106,7 +121,8 @@ def _start_casting(device: discovery.CastDevice, audio_only: bool = False) -> No
             banner="♪ Casting desktop audio",
         )
         return
-    ui.console.print("[dim]Approve screen sharing in the system dialog (pick a screen).[/dim]")
+    if state.load_restore_token() is None:
+        ui.console.print("[dim]Approve screen sharing in the system dialog (pick a screen).[/dim]")
     _run_session(
         session.ScreenSession(device),
         device,
