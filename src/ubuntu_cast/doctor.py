@@ -135,6 +135,17 @@ def check_mp3_encoder() -> CheckResult:
     )
 
 
+def check_aac_encoder() -> CheckResult:
+    if _have_gst_plugin("avenc_aac") or _have_gst_plugin("voaacenc"):
+        return CheckResult("AAC encoder", Status.OK, "available")
+    return CheckResult(
+        "AAC encoder",
+        Status.FAIL,
+        "none found",
+        "Needed for screen casting audio. Install with: sudo apt install gstreamer1.0-libav",
+    )
+
+
 def run_all_checks() -> list[CheckResult]:
     return [
         check_session(),
@@ -143,5 +154,6 @@ def run_all_checks() -> list[CheckResult]:
         check_gstreamer(),
         check_pipewiresrc(),
         check_h264_encoder(),
+        check_aac_encoder(),
         check_mp3_encoder(),
     ]

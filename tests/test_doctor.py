@@ -30,5 +30,5 @@ def test_missing_gstreamer_has_install_hint(monkeypatch):
 
 def test_every_check_runs():
     results = doctor.run_all_checks()
-    assert len(results) == 7
+    assert len(results) == 8
     assert all(r.label and r.detail for r in results)
