@@ -49,12 +49,25 @@ def main_callback(
     ] = False,
     audio_only: AudioOnlyOption = False,
 ) -> None:
-    """With no subcommand: discover devices, pick one interactively, and start casting."""
+    """With no subcommand: show the tray icon (falls back to the terminal picker)."""
     if ctx.invoked_subcommand is not None:
         return
+    try:
+        tray.run()
+    except RuntimeError:
+        _pick_and_cast(audio_only=audio_only)
+
+
+def _pick_and_cast(audio_only: bool) -> None:
     devices = _discover_or_exit(timeout=5.0)
     device = ui.pick_device(devices)
     _start_casting(device, audio_only=audio_only)
+
+
+@app.command(name="pick")
+def pick_command(audio_only: AudioOnlyOption = False) -> None:
+    """Discover devices, pick one interactively in the terminal, and start casting."""
+    _pick_and_cast(audio_only=audio_only)
 
 
 @app.command()
@@ -96,6 +109,18 @@ def install_launcher() -> None:
         "Search for [bold cyan]Ubuntu Cast[/bold cyan] in the Activities overview "
         "(right-click it for audio-only)."
     )
+
+
+@app.command(name="install-autostart")
+def install_autostart_command() -> None:
+    """Start the tray icon automatically at login."""
+    try:
+        path = launcher.install_autostart()
+    except RuntimeError as error:
+        ui.error_console.print(f"Could not install autostart: {error}")
+        raise typer.Exit(code=1) from error
+    ui.console.print(f"Autostart entry installed at [bold]{path}[/bold].")
+    ui.console.print("The tray icon will now appear automatically the next time you log in.")
 
 
 @app.command(name="tray")

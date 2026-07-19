@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import subprocess
 import sys
 import threading
 from pathlib import Path
 from typing import Any
 
-from . import discovery, session
+from . import discovery, session, state
 from .discovery import CastDevice
 
 # uv venvs (and `uv tool install`) don't see system site-packages, but
@@ -74,6 +76,9 @@ def _import_indicator() -> tuple[Any, Any, Any]:
 class TrayApp:
     """Owns the indicator icon/menu and the (at most one) active cast session."""
 
+    IDLE_ICON = "video-display"
+    ACTIVE_ICON = "network-transmit-receive-symbolic"
+
     def __init__(
         self, indicator_module: Any, gtk: Any, glib: Any, devices: list[CastDevice]
     ) -> None:
@@ -99,6 +104,10 @@ class TrayApp:
             self.menu.remove(child)
 
         if self._session is None:
+            last_item = self._build_last_device_item()
+            if last_item is not None:
+                self.menu.append(last_item)
+                self.menu.append(self._gtk.SeparatorMenuItem())
             if not self.devices:
                 empty = self._gtk.MenuItem(label="No devices found")
                 empty.set_sensitive(False)
@@ -128,6 +137,26 @@ class TrayApp:
         quit_item.connect("activate", self._on_quit)
         self.menu.append(quit_item)
         self.menu.show_all()
+        self._update_icon()
+
+    def _build_last_device_item(self) -> Any | None:
+        last = state.load_last_device()
+        if last is None:
+            return None
+        last_name, audio_only = last
+        device = discovery.find_device(self.devices, last_name)
+        if device is None:
+            return None
+        mode = " (audio only)" if audio_only else ""
+        item = self._gtk.MenuItem(label=f"Cast to {device.name} again{mode}")
+        item.connect("activate", self._on_start, device, audio_only)
+        return item
+
+    def _update_icon(self) -> None:
+        if self._session is None:
+            self.indicator.set_icon_full(self.IDLE_ICON, "Ubuntu Cast (idle)")
+        else:
+            self.indicator.set_icon_full(self.ACTIVE_ICON, "Ubuntu Cast (casting)")
 
     def _on_start(self, _widget: Any, device: CastDevice, audio_only: bool) -> None:
         if self._session is not None:
@@ -139,20 +168,29 @@ class TrayApp:
         self._session = cast_session
         self._active_device = device
         self._rebuild_menu()
-        threading.Thread(target=self._start_worker, args=(cast_session,), daemon=True).start()
+        threading.Thread(
+            target=self._start_worker, args=(cast_session, device, audio_only), daemon=True
+        ).start()
 
-    def _start_worker(self, cast_session: session.AudioSession | session.ScreenSession) -> None:
+    def _start_worker(
+        self,
+        cast_session: session.AudioSession | session.ScreenSession,
+        device: CastDevice,
+        audio_only: bool,
+    ) -> None:
         try:
             cast_session.start()
-        except Exception:
-            self._glib.idle_add(self._on_start_failed)
+        except Exception as error:
+            self._glib.idle_add(self._on_start_failed, str(error))
             return
+        state.save_last_device(device.name, audio_only)
         self._glib.idle_add(self._rebuild_menu)
 
-    def _on_start_failed(self) -> bool:
+    def _on_start_failed(self, message: str) -> bool:
         self._session = None
         self._active_device = None
         self._rebuild_menu()
+        self._notify_error("Ubuntu Cast", f"Could not start casting: {message}")
         return False
 
     def _on_stop(self, _widget: Any = None) -> None:
@@ -162,7 +200,18 @@ class TrayApp:
         self._session = None
         self._active_device = None
         self._rebuild_menu()
-        threading.Thread(target=cast_session.stop, daemon=True).start()
+        threading.Thread(target=self._stop_worker, args=(cast_session,), daemon=True).start()
+
+    def _stop_worker(self, cast_session: session.AudioSession | session.ScreenSession) -> None:
+        try:
+            cast_session.stop()
+        except Exception as error:
+            self._glib.idle_add(self._notify_error, "Ubuntu Cast", f"Error stopping cast: {error}")
+
+    def _notify_error(self, title: str, message: str) -> bool:
+        with contextlib.suppress(FileNotFoundError):
+            subprocess.run(["notify-send", "--icon=dialog-error", title, message], check=False)
+        return False
 
     def _on_refresh(self, _widget: Any) -> None:
         self.devices = discovery.discover(timeout=5.0)
