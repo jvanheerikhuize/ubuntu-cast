@@ -13,16 +13,23 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .gstenv import sanitized_env
 
-STREAM_PATH = "/stream.mp3"
+STREAM_PATH = "/stream"
 _CHUNK_SIZE = 8192
 
 
 class StreamServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, command: list[str]) -> None:
+    def __init__(
+        self,
+        command: list[str],
+        content_type: str = "audio/mpeg",
+        pass_fds: tuple[int, ...] = (),
+    ) -> None:
         super().__init__(("0.0.0.0", 0), _StreamHandler)
         self.command = command
+        self.content_type = content_type
+        self.pass_fds = pass_fds
 
 
 class _StreamHandler(BaseHTTPRequestHandler):
@@ -33,7 +40,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         self.send_response(200)
-        self.send_header("Content-Type", "audio/mpeg")
+        self.send_header("Content-Type", self.server.content_type)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         pipeline = subprocess.Popen(
@@ -41,6 +48,7 @@ class _StreamHandler(BaseHTTPRequestHandler):
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             env=sanitized_env(),
+            pass_fds=self.server.pass_fds,
         )
         assert pipeline.stdout is not None
         try:
@@ -56,9 +64,13 @@ class _StreamHandler(BaseHTTPRequestHandler):
         """Keep request chatter out of the user's terminal."""
 
 
-def start(command: list[str]) -> StreamServer:
+def start(
+    command: list[str],
+    content_type: str = "audio/mpeg",
+    pass_fds: tuple[int, ...] = (),
+) -> StreamServer:
     """Serve `command`'s stdout on an ephemeral port; returns the running server."""
-    server = StreamServer(command)
+    server = StreamServer(command, content_type=content_type, pass_fds=pass_fds)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
