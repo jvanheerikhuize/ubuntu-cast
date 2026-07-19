@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pychromecast
 
-from . import audio, portal, stream, video
+from . import audio, portal, state, stream, video
 from .discovery import CastDevice
 
 
@@ -90,8 +90,9 @@ class ScreenSession:
     def start(self) -> str:
         """Negotiate capture, start streaming, tell the device to play.
 
-        Shows the system screen-share dialog; raises portal.PortalError if the
-        user cancels it. Encoders are checked first so a missing one fails fast
+        Shows the system screen-share dialog on the first run (later runs
+        reuse the saved restore token); raises portal.PortalError if the user
+        cancels it. Encoders are checked first so a missing one fails fast
         without popping the dialog.
         """
         h264_encoder = video.pick_h264_encoder()
@@ -100,7 +101,9 @@ class ScreenSession:
 
         portal_session = portal.ScreenCastSession()
         self._portal = portal_session
-        node_id = portal_session.open()
+        # A token from an earlier approved cast skips the share dialog.
+        node_id = portal_session.open(restore_token=state.load_restore_token())
+        state.save_restore_token(portal_session.restore_token)
 
         def make_command() -> tuple[list[str], tuple[int, ...]]:
             # A PipeWire fd is a single-consumer socket: each pipeline (the
