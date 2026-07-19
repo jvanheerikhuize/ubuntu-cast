@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 from rich.live import Live
 
-from . import __version__, discovery, doctor, launcher, session, state, ui
+from . import __version__, discovery, doctor, launcher, session, state, tray, ui
 
 app = typer.Typer(
     name="ubuntu-cast",
@@ -96,6 +96,18 @@ def install_launcher() -> None:
         "Search for [bold cyan]Ubuntu Cast[/bold cyan] in the Activities overview "
         "(right-click it for audio-only)."
     )
+
+
+@app.command(name="tray")
+def tray_command(
+    timeout: TimeoutOption = 5.0,
+) -> None:
+    """Show a GNOME top-bar icon to start/stop casting without a terminal."""
+    try:
+        tray.run(timeout=timeout)
+    except RuntimeError as error:
+        ui.error_console.print(f"Could not start the tray: {error}")
+        raise typer.Exit(code=1) from error
 
 
 @app.command(name="doctor")

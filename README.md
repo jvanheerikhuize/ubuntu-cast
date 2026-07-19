@@ -27,6 +27,7 @@ $ ubuntu-cast
 | `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
 | `ubuntu-cast doctor` | Check that this machine is ready to cast |
 | `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
+| `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
 
 The first screen cast pops the system screen-share dialog — pick the monitor to
 mirror and approve. Your choice is remembered (a portal restore token in
@@ -61,6 +62,18 @@ icon for audio-only). It opens in a terminal window — that's where the device
 picker and the live status panel run; Ctrl+C there stops the cast. For
 one-keystroke casting, bind a custom shortcut in GNOME Settings → Keyboard to
 `gtk-launch ubuntu-cast` (it opens that same terminal launcher).
+
+Prefer no window at all? `ubuntu-cast tray` puts an icon in the GNOME top bar
+with a menu to pick a device (or audio-only) and stop casting — no terminal,
+no dialog after the first approved cast. It needs PyGObject and an
+AppIndicator typelib that aren't part of the Python packaging story:
+
+```bash
+sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
+```
+
+`ubuntu-cast doctor` reports this as an optional check, since the terminal
+launcher works without it.
 
 For development, run from the checkout instead: `uv sync`, then
 `uv run ubuntu-cast`.
@@ -99,6 +112,6 @@ uv run ruff check .  # lint
 uv run ruff format . # format
 ```
 
-See [INTENT.md](INTENT.md) for the full plan. Phases 1–5 (discovery, audio-only
-casting, screen + audio casting, performance + live status UI, seamless launch)
-are done; remaining ideas: quality presets, a tray indicator, deb packaging.
+See [INTENT.md](INTENT.md) for the full plan. Phases 1–6 (discovery, audio-only
+casting, screen + audio casting, performance + live status UI, seamless launch,
+tray indicator) are done; remaining ideas: quality presets, deb packaging.
