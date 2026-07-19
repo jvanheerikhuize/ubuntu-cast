@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 from uuid import UUID
 
 import pychromecast
@@ -77,7 +76,6 @@ class ScreenSession:
         self._server: stream.StreamServer | None = None
         self._cast: pychromecast.Chromecast | None = None
         self._portal: portal.ScreenCastSession | None = None
-        self._pipewire_fd: int | None = None
 
     def start(self) -> str:
         """Negotiate capture, start streaming, tell the device to play.
@@ -90,16 +88,18 @@ class ScreenSession:
         aac_encoder = video.pick_aac_encoder(self.audio_bitrate)
         monitor = audio.default_sink_monitor()
 
-        self._portal = portal.ScreenCastSession()
-        capture = self._portal.open()
-        self._pipewire_fd = capture.pipewire_fd
+        portal_session = portal.ScreenCastSession()
+        self._portal = portal_session
+        node_id = portal_session.open()
 
-        command = video.fmp4_stream_command(
-            capture.pipewire_fd, capture.node_id, monitor, h264_encoder, aac_encoder
-        )
-        self._server = stream.start(
-            command, content_type="video/mp4", pass_fds=(capture.pipewire_fd,)
-        )
+        def make_command() -> tuple[list[str], tuple[int, ...]]:
+            # A PipeWire fd is a single-consumer socket: each pipeline (the
+            # Chromecast reconnects, browsers probe) needs its own fresh one.
+            fd = portal_session.open_pipewire_fd()
+            command = video.fmp4_stream_command(fd, node_id, monitor, h264_encoder, aac_encoder)
+            return command, (fd,)
+
+        self._server = stream.start(command_factory=make_command, content_type="video/mp4")
         ip = stream.local_ip_for(self.device.host)
         self.url = f"http://{ip}:{self._server.server_port}{stream.STREAM_PATH}"
 
@@ -119,7 +119,3 @@ class ScreenSession:
         if self._portal is not None:
             self._portal.close()
             self._portal = None
-        if self._pipewire_fd is not None:
-            with contextlib.suppress(OSError):
-                os.close(self._pipewire_fd)
-            self._pipewire_fd = None

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import secrets
-from dataclasses import dataclass
+import threading
 
 from jeepney import DBusAddress, MatchRule, new_method_call
 from jeepney.bus_messages import message_bus
@@ -36,14 +36,6 @@ class PortalError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class ScreenCast:
-    """A negotiated capture: the PipeWire stream node and remote connection fd."""
-
-    node_id: int
-    pipewire_fd: int
-
-
 def request_path(unique_name: str, token: str) -> str:
     """Predictable Request object path, per the portal spec."""
     sender = unique_name.lstrip(":").replace(".", "_")
@@ -56,9 +48,16 @@ class ScreenCastSession:
     def __init__(self) -> None:
         self._conn: DBusConnection | None = None
         self._session_handle: str | None = None
+        # jeepney's blocking connection is not thread-safe; HTTP handler
+        # threads call open_pipewire_fd() while the main thread may close().
+        self._lock = threading.Lock()
 
-    def open(self) -> ScreenCast:
-        """Run the portal handshake; shows the system share dialog."""
+    def open(self) -> int:
+        """Run the portal handshake; shows the system share dialog.
+
+        Returns the PipeWire node id of the approved stream. Call
+        open_pipewire_fd() for a connection fd to read it with.
+        """
         self._conn = open_dbus_connection(bus="SESSION", enable_fds=True)
         session_token = "ubuntu_cast_" + secrets.token_hex(4)
         results = self._request(
@@ -84,13 +83,19 @@ class ScreenCastSession:
         streams = results["streams"][1]
         if not streams:
             raise PortalError("the portal approved the session but returned no streams")
-        node_id = streams[0][0]
+        return streams[0][0]
 
+    def open_pipewire_fd(self) -> int:
+        """A fresh PipeWire connection fd. Each fd is a single-consumer socket,
+        so every pipeline needs its own; the caller owns closing it."""
         remote = new_method_call(
             _SCREENCAST, "OpenPipeWireRemote", "oa{sv}", (self._session_handle, {})
         )
-        reply = unwrap_msg(self._conn.send_and_get_reply(remote, timeout=_REPLY_TIMEOUT))
-        return ScreenCast(node_id=node_id, pipewire_fd=reply[0].to_raw_fd())
+        with self._lock:
+            if self._conn is None:
+                raise PortalError("the portal session is closed")
+            reply = unwrap_msg(self._conn.send_and_get_reply(remote, timeout=_REPLY_TIMEOUT))
+        return reply[0].to_raw_fd()
 
     def _request(
         self, method: str, signature: str, body: tuple, timeout: float = _REPLY_TIMEOUT
@@ -120,18 +125,19 @@ class ScreenCastSession:
 
     def close(self) -> None:
         """End the portal session and drop the D-Bus connection."""
-        if self._conn is None:
-            return
-        if self._session_handle is not None:
-            session = DBusAddress(
-                self._session_handle,
-                bus_name=_DESKTOP_BUS,
-                interface="org.freedesktop.portal.Session",
-            )
-            with contextlib.suppress(Exception):
-                self._conn.send_and_get_reply(
-                    new_method_call(session, "Close"), timeout=_REPLY_TIMEOUT
+        with self._lock:
+            if self._conn is None:
+                return
+            if self._session_handle is not None:
+                session = DBusAddress(
+                    self._session_handle,
+                    bus_name=_DESKTOP_BUS,
+                    interface="org.freedesktop.portal.Session",
                 )
-            self._session_handle = None
-        self._conn.close()
-        self._conn = None
+                with contextlib.suppress(Exception):
+                    self._conn.send_and_get_reply(
+                        new_method_call(session, "Close"), timeout=_REPLY_TIMEOUT
+                    )
+                self._session_handle = None
+            self._conn.close()
+            self._conn = None
