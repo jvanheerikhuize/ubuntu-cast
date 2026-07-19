@@ -7,8 +7,10 @@ import subprocess
 from .gstenv import sanitized_env
 
 # Preferred first: hardware VA-API, then software x264. 8 Mbit/s suits 1080p desktop.
+# No rate-control on vaapih264enc: Intel's iHD driver rejects caps negotiation
+# in cbr/vbr modes, so it must stay on its default (cqp).
 _H264_ENCODERS: tuple[tuple[str, list[str]], ...] = (
-    ("vaapih264enc", ["vaapih264enc", "rate-control=cbr", "bitrate=8000", "keyframe-period=60"]),
+    ("vaapih264enc", ["vaapih264enc", "bitrate=8000", "keyframe-period=60"]),
     ("vah264enc", ["vah264enc", "bitrate=8000", "key-int-max=60"]),
     (
         "x264enc",
@@ -69,6 +71,12 @@ def fmp4_stream_command(
         "do-timestamp=true",
         "!",
         "videoconvert",
+        "!",
+        "videorate",
+        "!",
+        # The portal stream is variable-rate (framerate=0/1); pin a constant
+        # 30 fps so the encoder and Chromecast see a steady cadence.
+        "video/x-raw,format=NV12,framerate=30/1",
         "!",
         *h264_encoder,
         "!",

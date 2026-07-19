@@ -9,7 +9,11 @@ def _available(*names: str):
 
 def test_pick_h264_encoder_prefers_hardware(monkeypatch):
     monkeypatch.setattr(video, "_have_element", _available("vaapih264enc", "x264enc"))
-    assert video.pick_h264_encoder()[0] == "vaapih264enc"
+    encoder = video.pick_h264_encoder()
+    assert encoder[0] == "vaapih264enc"
+    # Intel's iHD driver fails caps negotiation in cbr/vbr modes; the encoder
+    # must stay on its default rate control.
+    assert not any(arg.startswith("rate-control=") for arg in encoder)
 
 
 def test_pick_h264_encoder_falls_back_to_x264(monkeypatch):
@@ -50,3 +54,13 @@ def test_fmp4_stream_command_wires_both_branches_into_the_mux():
     assert command[-1] == "mux."
     assert "fd=1" in command
     assert command.count("queue") == 2
+
+
+def test_fmp4_stream_command_pins_a_constant_framerate():
+    # The portal stream is variable-rate (framerate=0/1), which vaapih264enc
+    # refuses to negotiate; videorate + the caps filter make it constant.
+    command = video.fmp4_stream_command(7, 42, "m", ["x264enc"], ["avenc_aac"])
+    assert "videorate" in command
+    caps = command[command.index("videorate") + 2]
+    assert "framerate=30/1" in caps
+    assert command.index("videorate") < command.index("x264enc")
