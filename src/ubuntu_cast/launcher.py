@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 LAUNCHER_NAME = "ubuntu-cast.desktop"
+AUTOSTART_NAME = "ubuntu-cast-tray.desktop"
 
 
 def find_executable() -> str:
@@ -54,4 +55,32 @@ def install(directory: Path | None = None) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / LAUNCHER_NAME
     path.write_text(desktop_entry(find_executable()))
+    return path
+
+
+def autostart_entry(executable: str) -> str:
+    """A .desktop entry that starts the tray icon automatically at login.
+
+    Terminal=false and NoDisplay=true because this runs unattended in the
+    background; it shouldn't show up as a launchable app or open a window.
+    """
+    return f"""\
+[Desktop Entry]
+Type=Application
+Name=Ubuntu Cast Tray
+Comment=Cast your Ubuntu desktop — screen and audio — to a Chromecast
+Exec={executable} tray
+Terminal=false
+Icon=video-display
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+"""
+
+
+def install_autostart(directory: Path | None = None) -> Path:
+    """Write the tray autostart entry so it launches automatically at login."""
+    directory = directory or Path("~/.config/autostart").expanduser()
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / AUTOSTART_NAME
+    path.write_text(autostart_entry(find_executable()))
     return path

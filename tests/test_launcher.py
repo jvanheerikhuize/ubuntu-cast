@@ -28,3 +28,18 @@ def test_find_executable_errors_when_not_installed(monkeypatch):
     monkeypatch.setattr(launcher.shutil, "which", lambda name: None)
     with pytest.raises(RuntimeError, match="uv tool install"):
         launcher.find_executable()
+
+
+def test_autostart_entry_runs_unattended_in_the_background():
+    entry = launcher.autostart_entry("/opt/bin/ubuntu-cast")
+    assert "Exec=/opt/bin/ubuntu-cast tray\n" in entry
+    assert "Terminal=false" in entry
+    assert "NoDisplay=true" in entry
+    assert "X-GNOME-Autostart-enabled=true" in entry
+
+
+def test_install_autostart_writes_the_autostart_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(launcher, "find_executable", lambda: "/opt/bin/ubuntu-cast")
+    path = launcher.install_autostart(directory=tmp_path / "autostart")
+    assert path.name == "ubuntu-cast-tray.desktop"
+    assert "Exec=/opt/bin/ubuntu-cast tray" in path.read_text()
