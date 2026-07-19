@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import socket
 import subprocess
+import tempfile
 import threading
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,6 +20,12 @@ from .gstenv import sanitized_env
 
 STREAM_PATH = "/stream"
 _CHUNK_SIZE = 8192
+
+
+def pipeline_log_path() -> str:
+    """Where pipeline stderr is appended, so failures are diagnosable after the fact."""
+    return os.path.join(tempfile.gettempdir(), "ubuntu-cast-pipeline.log")
+
 
 # Returns (command, fds): the pipeline argv and the fds it inherits. The
 # server passes the fds to the child and closes its own copies afterwards.
@@ -62,13 +69,14 @@ class _StreamHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", self.server.content_type)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        pipeline = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            env=sanitized_env(),
-            pass_fds=fds,
-        )
+        with open(pipeline_log_path(), "ab") as log:
+            pipeline = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=log,
+                env=sanitized_env(),
+                pass_fds=fds,
+            )
         # The child holds its own dups now; keeping ours would leak one fd
         # per connection and hold PipeWire sockets open forever.
         for fd in fds:
