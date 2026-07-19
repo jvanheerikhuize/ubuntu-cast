@@ -94,10 +94,12 @@ one-keystroke casting, bind a custom shortcut in GNOME Settings → Keyboard to
 
 Prefer no window at all? `ubuntu-cast tray` puts an icon in the GNOME top bar
 with a menu to pick a device (or audio-only) and stop casting — no terminal,
-no dialog after the first approved cast. If a cast fails to start or stop, the
-tray reports it with a desktop notification instead of failing silently. It
-needs PyGObject and an AppIndicator typelib that aren't part of the Python
-packaging story:
+no dialog after the first approved cast. The icon itself shows at a glance
+whether you're casting, and the menu leads with a one-click "Cast to \<device\>
+again" entry for whichever device (and mode) you used last. If a cast fails to
+start or stop, the tray reports it with a desktop notification instead of
+failing silently. It needs PyGObject and an AppIndicator typelib that aren't
+part of the Python packaging story:
 
 ```bash
 sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
