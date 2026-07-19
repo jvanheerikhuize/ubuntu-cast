@@ -8,6 +8,8 @@ import subprocess
 from dataclasses import dataclass
 from enum import Enum
 
+from .gstenv import sanitized_env
+
 
 class Status(Enum):
     OK = "ok"
@@ -30,6 +32,7 @@ def _have_gst_plugin(plugin: str) -> bool:
         ["gst-inspect-1.0", "--exists", plugin],
         capture_output=True,
         check=False,
+        env=sanitized_env(),
     )
     return result.returncode == 0
 
@@ -121,6 +124,17 @@ def check_h264_encoder() -> CheckResult:
     )
 
 
+def check_mp3_encoder() -> CheckResult:
+    if _have_gst_plugin("lamemp3enc"):
+        return CheckResult("MP3 encoder", Status.OK, "lamemp3enc available")
+    return CheckResult(
+        "MP3 encoder",
+        Status.FAIL,
+        "lamemp3enc missing",
+        "Needed for audio casting. Install with: sudo apt install gstreamer1.0-plugins-good",
+    )
+
+
 def run_all_checks() -> list[CheckResult]:
     return [
         check_session(),
@@ -129,4 +143,5 @@ def run_all_checks() -> list[CheckResult]:
         check_gstreamer(),
         check_pipewiresrc(),
         check_h264_encoder(),
+        check_mp3_encoder(),
     ]
