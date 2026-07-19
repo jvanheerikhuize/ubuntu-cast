@@ -146,6 +146,29 @@ def check_aac_encoder() -> CheckResult:
     )
 
 
+def check_appindicator() -> CheckResult:
+    from . import tray
+
+    try:
+        namespace = tray.find_appindicator_namespace()
+    except RuntimeError as error:
+        return CheckResult(
+            "Tray indicator (optional)",
+            Status.WARN,
+            str(error),
+            "sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1",
+        )
+    if namespace is None:
+        return CheckResult(
+            "Tray indicator (optional)",
+            Status.WARN,
+            "AppIndicator typelib missing",
+            "Needed for `ubuntu-cast tray`. Install with: "
+            "sudo apt install gir1.2-ayatanaappindicator3-0.1",
+        )
+    return CheckResult("Tray indicator (optional)", Status.OK, f"{namespace} available")
+
+
 def run_all_checks() -> list[CheckResult]:
     return [
         check_session(),
@@ -156,4 +179,5 @@ def run_all_checks() -> list[CheckResult]:
         check_h264_encoder(),
         check_aac_encoder(),
         check_mp3_encoder(),
+        check_appindicator(),
     ]
