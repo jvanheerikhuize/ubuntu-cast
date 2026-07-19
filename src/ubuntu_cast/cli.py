@@ -96,28 +96,38 @@ def _start_casting(device: discovery.CastDevice, audio_only: bool = False) -> No
     ui.console.print(
         f"Selected [bold cyan]{device.name}[/bold cyan] [dim]({device.model}, {device.host})[/dim]"
     )
-    if not audio_only:
-        ui.console.print(
-            "[yellow]Screen mirroring isn't implemented yet — it lands in Phase 3 "
-            "(see INTENT.md). Try audio in the meantime: ubuntu-cast start -d "
-            f"'{device.name}' --audio-only[/yellow]"
+    if audio_only:
+        _run_session(
+            session.AudioSession(device),
+            device,
+            spinner=f"Connecting to {device.name}…",
+            banner="♪ Casting desktop audio",
         )
         return
-    _cast_audio(device)
+    ui.console.print("[dim]Approve screen sharing in the system dialog (pick a screen).[/dim]")
+    _run_session(
+        session.ScreenSession(device),
+        device,
+        spinner=f"Waiting for approval, then connecting to {device.name}…",
+        banner="⛶ Casting your screen",
+    )
 
 
-def _cast_audio(device: discovery.CastDevice) -> None:
-    cast_session = session.AudioSession(device)
+def _run_session(
+    cast_session: session.AudioSession | session.ScreenSession,
+    device: discovery.CastDevice,
+    spinner: str,
+    banner: str,
+) -> None:
     try:
-        with ui.console.status(f"[bold]Connecting to {device.name}…[/bold]"):
+        with ui.console.status(f"[bold]{spinner}[/bold]"):
             url = cast_session.start()
     except Exception as error:
         cast_session.stop()
-        ui.error_console.print(f"Could not start the audio cast: {error}")
+        ui.error_console.print(f"Could not start casting: {error}")
         raise typer.Exit(code=1) from error
     ui.console.print(
-        f"[green]♪ Casting desktop audio[/green] to [bold cyan]{device.name}[/bold cyan] "
-        f"[dim]({url})[/dim]"
+        f"[green]{banner}[/green] to [bold cyan]{device.name}[/bold cyan] [dim]({url})[/dim]"
     )
     ui.console.print("[dim]Press Ctrl+C to stop.[/dim]")
     try:
