@@ -1,5 +1,8 @@
 # ubuntu-cast
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
+
 Cast your Ubuntu desktop — screen **and** audio — to a Chromecast from the terminal.
 
 A modern replacement for mkchromecast, built for today's Ubuntu desktop stack:
@@ -115,3 +118,7 @@ uv run ruff format . # format
 See [INTENT.md](INTENT.md) for the full plan. Phases 1–6 (discovery, audio-only
 casting, screen + audio casting, performance + live status UI, seamless launch,
 tray indicator) are done; remaining ideas: quality presets, deb packaging.
+
+## License
+
+[MIT](LICENSE)
