@@ -1,5 +1,6 @@
 import contextlib
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -95,6 +96,23 @@ def test_factory_failure_returns_503():
         with pytest.raises(urllib.error.HTTPError) as excinfo:
             urllib.request.urlopen(url, timeout=5)
         assert excinfo.value.code == 503
+
+
+def test_active_streams_counts_connected_clients(server):
+    assert server.active_streams == 0
+    # Keep producing output: a disconnect is only noticed on the next write,
+    # so a silent pipeline would leave the handler counted as active.
+    drip = "printf streaming; while true; do printf x; sleep 0.05; done"
+    with running_server(command=["sh", "-c", drip]) as running:
+        url = f"http://127.0.0.1:{running.server_port}{stream.STREAM_PATH}"
+        with urllib.request.urlopen(url, timeout=5) as response:
+            assert response.read(9) == b"streaming"
+            assert running.active_streams == 1
+        # The handler decrements after the client disconnects; give it a beat.
+        deadline = time.monotonic() + 5
+        while running.active_streams != 0 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert running.active_streams == 0
 
 
 def test_command_and_factory_are_mutually_exclusive():

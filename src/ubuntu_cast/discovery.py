@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
-import pychromecast
+import zeroconf
+from pychromecast.discovery import CastBrowser, SimpleCastListener
 
 
 @dataclass(frozen=True)
@@ -16,10 +18,29 @@ class CastDevice:
     uuid: str
 
 
-def discover(timeout: float = 5.0) -> list[CastDevice]:
-    """Browse mDNS for Cast devices, returning them sorted by name."""
-    infos, browser = pychromecast.discovery.discover_chromecasts(timeout=timeout)
-    pychromecast.discovery.stop_discovery(browser)
+def discover(timeout: float = 5.0, wanted: str | None = None) -> list[CastDevice]:
+    """Browse mDNS for Cast devices, returning them sorted by name.
+
+    With `wanted`, browsing stops as soon as a device with exactly that
+    friendly name announces itself, instead of always waiting out the full
+    timeout. Prefix matching still needs the whole window: another device
+    appearing later could make the prefix ambiguous.
+    """
+    done = threading.Event()
+    browser: CastBrowser | None = None
+
+    def on_added(_uuid: object, _service: str) -> None:
+        assert browser is not None
+        if wanted is not None and any(
+            info.friendly_name == wanted for info in browser.devices.values()
+        ):
+            done.set()
+
+    browser = CastBrowser(SimpleCastListener(on_added), zeroconf.Zeroconf())
+    browser.start_discovery()
+    done.wait(timeout)
+    infos = list(browser.devices.values())
+    browser.stop_discovery()
     devices = [
         CastDevice(
             name=info.friendly_name or "(unnamed)",

@@ -70,7 +70,12 @@ def fmp4_stream_command(
         f"path={node_id}",
         "do-timestamp=true",
         "!",
+        # Decouple capture from encoding: a slow encoder must never
+        # back-pressure pipewiresrc into dropping portal frames.
+        "queue",
+        "!",
         "videoconvert",
+        "n-threads=0",
         "!",
         "videorate",
         "!",

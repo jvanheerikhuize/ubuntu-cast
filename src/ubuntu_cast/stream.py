@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from .gstenv import sanitized_env
 
 STREAM_PATH = "/stream"
-_CHUNK_SIZE = 8192
+_CHUNK_SIZE = 65536
 
 
 def pipeline_log_path() -> str:
@@ -47,10 +47,29 @@ class StreamServer(ThreadingHTTPServer):
         self.command = command
         self.content_type = content_type
         self.command_factory = command_factory
+        self._streams_lock = threading.Lock()
+        self._active_streams = 0
+
+    @property
+    def active_streams(self) -> int:
+        """How many clients are currently pulling the stream."""
+        with self._streams_lock:
+            return self._active_streams
+
+    def _stream_started(self) -> None:
+        with self._streams_lock:
+            self._active_streams += 1
+
+    def _stream_ended(self) -> None:
+        with self._streams_lock:
+            self._active_streams -= 1
 
 
 class _StreamHandler(BaseHTTPRequestHandler):
     server: StreamServer
+    # Live media: push fragments out the moment the encoder produces them
+    # instead of letting Nagle's algorithm batch them up.
+    disable_nagle_algorithm = True
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         if self.path != STREAM_PATH:
@@ -82,12 +101,16 @@ class _StreamHandler(BaseHTTPRequestHandler):
         for fd in fds:
             os.close(fd)
         assert pipeline.stdout is not None
+        self.server._stream_started()
         try:
-            while chunk := pipeline.stdout.read(_CHUNK_SIZE):
+            # read1, not read: read(n) blocks until n bytes accumulate, adding
+            # a full buffer of latency; read1 forwards whatever is ready now.
+            while chunk := pipeline.stdout.read1(_CHUNK_SIZE):
                 self.wfile.write(chunk)
         except (BrokenPipeError, ConnectionResetError):
             pass
         finally:
+            self.server._stream_ended()
             pipeline.terminate()
             pipeline.wait(timeout=5)
 
