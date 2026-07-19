@@ -6,6 +6,7 @@ import time
 from typing import Annotated
 
 import typer
+from rich.live import Live
 
 from . import __version__, discovery, doctor, session, ui
 
@@ -25,9 +26,9 @@ AudioOnlyOption = Annotated[
 ]
 
 
-def _discover_or_exit(timeout: float) -> list[discovery.CastDevice]:
+def _discover_or_exit(timeout: float, wanted: str | None = None) -> list[discovery.CastDevice]:
     with ui.console.status("[bold]Searching for Cast devices…[/bold]"):
-        devices = discovery.discover(timeout=timeout)
+        devices = discovery.discover(timeout=timeout, wanted=wanted)
     if not devices:
         ui.no_devices_help()
         raise typer.Exit(code=1)
@@ -72,7 +73,8 @@ def start(
     audio_only: AudioOnlyOption = False,
 ) -> None:
     """Start casting to a named device (non-interactive, scriptable)."""
-    found = _discover_or_exit(timeout)
+    # An exact name match lets discovery return the moment the device appears.
+    found = _discover_or_exit(timeout, wanted=device)
     match = discovery.find_device(found, device)
     if match is None:
         ui.error_console.print(f"No device matching '{device}'.")
@@ -126,19 +128,27 @@ def _run_session(
         cast_session.stop()
         ui.error_console.print(f"Could not start casting: {error}")
         raise typer.Exit(code=1) from error
-    ui.console.print(
-        f"[green]{banner}[/green] to [bold cyan]{device.name}[/bold cyan] [dim]({url})[/dim]"
-    )
-    ui.console.print("[dim]Press Ctrl+C to stop.[/dim]")
+    started = time.monotonic()
     try:
-        while True:
-            time.sleep(0.5)
+        with Live(console=ui.console, transient=True, refresh_per_second=4) as live:
+            while True:
+                live.update(
+                    ui.casting_panel(
+                        device,
+                        url,
+                        title=banner,
+                        elapsed_seconds=time.monotonic() - started,
+                        viewers=cast_session.active_streams,
+                    )
+                )
+                time.sleep(0.25)
     except KeyboardInterrupt:
         pass
     finally:
         with ui.console.status("[bold]Stopping…[/bold]"):
             cast_session.stop()
-        ui.console.print("Stopped.")
+        elapsed = ui.format_elapsed(time.monotonic() - started)
+        ui.console.print(f"Stopped after [bold]{elapsed}[/bold].")
 
 
 def main() -> None:

@@ -43,6 +43,11 @@ class AudioSession:
         self._server: stream.StreamServer | None = None
         self._cast: pychromecast.Chromecast | None = None
 
+    @property
+    def active_streams(self) -> int:
+        """How many clients are pulling the stream right now."""
+        return self._server.active_streams if self._server is not None else 0
+
     def start(self) -> str:
         """Start streaming and tell the device to play; returns the stream URL."""
         monitor = audio.default_sink_monitor()
@@ -76,6 +81,11 @@ class ScreenSession:
         self._server: stream.StreamServer | None = None
         self._cast: pychromecast.Chromecast | None = None
         self._portal: portal.ScreenCastSession | None = None
+
+    @property
+    def active_streams(self) -> int:
+        """How many clients are pulling the stream right now."""
+        return self._server.active_streams if self._server is not None else 0
 
     def start(self) -> str:
         """Negotiate capture, start streaming, tell the device to play.
