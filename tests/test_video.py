@@ -53,7 +53,17 @@ def test_fmp4_stream_command_wires_both_branches_into_the_mux():
     assert "streamable=true" in command
     assert command[-1] == "mux."
     assert "fd=1" in command
-    assert command.count("queue") == 2
+    # Capture-decoupling queue plus one on each live branch before the mux.
+    assert command.count("queue") == 3
+
+
+def test_fmp4_stream_command_decouples_capture_from_encoding():
+    command = video.fmp4_stream_command(7, 42, "m", ["x264enc"], ["avenc_aac"])
+    # A queue right after pipewiresrc keeps a slow encoder from
+    # back-pressuring the capture into dropping portal frames.
+    assert command[command.index("do-timestamp=true") + 2] == "queue"
+    # videoconvert should use one thread per CPU, not a single thread.
+    assert command[command.index("videoconvert") + 1] == "n-threads=0"
 
 
 def test_fmp4_stream_command_pins_a_constant_framerate():
