@@ -24,13 +24,15 @@ $ ubuntu-cast
 
 | Command | What it does |
 |---|---|
-| `ubuntu-cast` | Interactive: discover devices, pick one, start casting |
+| `ubuntu-cast` | Shows the tray icon (falls back to the terminal picker if the tray isn't installed) |
+| `ubuntu-cast pick` | Interactive: discover devices, pick one, start casting |
 | `ubuntu-cast devices` | List Cast devices on the local network |
 | `ubuntu-cast start -d "woonkamer TV"` | Non-interactive start (device name or unique prefix) |
 | `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
 | `ubuntu-cast doctor` | Check that this machine is ready to cast |
 | `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
 | `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
+| `ubuntu-cast install-autostart` | Start the tray icon automatically at login |
 
 The first screen cast pops the system screen-share dialog — pick the monitor to
 mirror and approve. Your choice is remembered (a portal restore token in
@@ -92,15 +94,20 @@ one-keystroke casting, bind a custom shortcut in GNOME Settings → Keyboard to
 
 Prefer no window at all? `ubuntu-cast tray` puts an icon in the GNOME top bar
 with a menu to pick a device (or audio-only) and stop casting — no terminal,
-no dialog after the first approved cast. It needs PyGObject and an
-AppIndicator typelib that aren't part of the Python packaging story:
+no dialog after the first approved cast. If a cast fails to start or stop, the
+tray reports it with a desktop notification instead of failing silently. It
+needs PyGObject and an AppIndicator typelib that aren't part of the Python
+packaging story:
 
 ```bash
 sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
 ```
 
 `ubuntu-cast doctor` reports this as an optional check, since the terminal
-launcher works without it.
+launcher works without it. Run `ubuntu-cast install-autostart` to have the
+tray icon start automatically every time you log in — after that, the bare
+`ubuntu-cast` command (and your session login) both just open the tray, no
+manual `tray` subcommand needed.
 
 ### For development
 
@@ -111,13 +118,15 @@ Run from the checkout instead of a `uv tool install`: `uv sync`, then
 
 | Command | What it does |
 |---|---|
-| `ubuntu-cast` | Interactive: discover devices, pick one, start casting |
+| `ubuntu-cast` | Shows the tray icon (falls back to the terminal picker if the tray isn't installed) |
+| `ubuntu-cast pick` | Interactive: discover devices, pick one, start casting |
 | `ubuntu-cast devices` | List Cast devices on the local network |
 | `ubuntu-cast start -d "woonkamer TV"` | Non-interactive start (device name or unique prefix) |
 | `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
 | `ubuntu-cast doctor` | Check that this machine is ready to cast |
 | `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
 | `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
+| `ubuntu-cast install-autostart` | Start the tray icon automatically at login |
 
 The first screen cast pops the system screen-share dialog — pick the monitor to
 mirror and approve. Your choice is remembered (a portal restore token in
