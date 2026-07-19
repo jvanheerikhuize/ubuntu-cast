@@ -39,29 +39,53 @@ screen.
 Expect **2–5 seconds of delay**: the Chromecast buffers its HTTP stream. That's
 fine for movies, photos, and presentations — not for gaming.
 
-## Installation
+## Install
 
-With [uv](https://docs.astral.sh/uv/):
+Requires Ubuntu 24.04 (or similar), a GNOME Wayland session, and
+[uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone git@github.com:jvanheerikhuize/ubuntu-cast.git
 uv tool install --editable ./ubuntu-cast
-ubuntu-cast doctor
 ```
 
 `uv tool install` puts `ubuntu-cast` on your PATH so it works from any
 terminal; `--editable` makes the installed command track the checkout, so a
-`git pull` is all an upgrade takes. Then make it feel like an app:
+`git pull` in `./ubuntu-cast` is all an upgrade takes.
+
+Install the system packages the pipeline needs:
+
+```bash
+sudo apt install gstreamer1.0-tools gstreamer1.0-pipewire \
+  gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
+  gstreamer1.0-vaapi gstreamer1.0-libav
+```
+
+`gstreamer1.0-vaapi` enables hardware H.264 encoding (Intel/AMD); without it
+the pipeline falls back to software x264.
+
+Then verify everything is wired up:
+
+```bash
+ubuntu-cast doctor
+```
+
+Every requirement is checked and each failure comes with the exact command
+that fixes it.
+
+### Optional: app launcher
 
 ```bash
 ubuntu-cast install-launcher
 ```
 
-That adds **Ubuntu Cast** to the GNOME Activities overview (right-click the
-icon for audio-only). It opens in a terminal window — that's where the device
+Adds **Ubuntu Cast** to the GNOME Activities overview (right-click the icon
+for audio-only). It opens in a terminal window — that's where the device
 picker and the live status panel run; Ctrl+C there stops the cast. For
 one-keystroke casting, bind a custom shortcut in GNOME Settings → Keyboard to
 `gtk-launch ubuntu-cast` (it opens that same terminal launcher).
+
+### Optional: top-bar tray icon
 
 Prefer no window at all? `ubuntu-cast tray` puts an icon in the GNOME top bar
 with a menu to pick a device (or audio-only) and stop casting — no terminal,
@@ -75,20 +99,64 @@ sudo apt install python3-gi gir1.2-ayatanaappindicator3-0.1
 `ubuntu-cast doctor` reports this as an optional check, since the terminal
 launcher works without it.
 
-For development, run from the checkout instead: `uv sync`, then
+### For development
+
+Run from the checkout instead of a `uv tool install`: `uv sync`, then
 `uv run ubuntu-cast`.
 
-System requirements (Ubuntu 24.04, GNOME Wayland session):
+## Run
+
+| Command | What it does |
+|---|---|
+| `ubuntu-cast` | Interactive: discover devices, pick one, start casting |
+| `ubuntu-cast devices` | List Cast devices on the local network |
+| `ubuntu-cast start -d "woonkamer TV"` | Non-interactive start (device name or unique prefix) |
+| `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
+| `ubuntu-cast doctor` | Check that this machine is ready to cast |
+| `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
+| `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
+
+The first screen cast pops the system screen-share dialog — pick the monitor to
+mirror and approve. Your choice is remembered (a portal restore token in
+`~/.local/state/ubuntu-cast/`), so later casts start with **no dialog at all**.
+Revoke it any time under GNOME Settings → Apps → Screen Sharing, or delete the
+token file. Stop casting with **Ctrl+C**; the Chromecast returns to its idle
+screen.
+
+Expect **2–5 seconds of delay**: the Chromecast buffers its HTTP stream. That's
+fine for movies, photos, and presentations — not for gaming.
+
+## Uninstall
+
+To remove ubuntu-cast completely:
 
 ```bash
-sudo apt install gstreamer1.0-tools gstreamer1.0-pipewire \
-  gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly \
-  gstreamer1.0-vaapi gstreamer1.0-libav
+# Stop any running cast/tray first (Ctrl+C, or close the tray icon).
+
+# Remove the CLI itself
+uv tool uninstall ubuntu-cast
+
+# Remove the app launcher, if you installed one
+rm -f ~/.local/share/applications/ubuntu-cast.desktop
+
+# Remove the saved portal restore token and any other state
+rm -rf ~/.local/state/ubuntu-cast
+
+# Revoke the screen-share permission (optional, matches the deleted token)
+# GNOME Settings → Apps → Screen Sharing → remove ubuntu-cast's entry
+
+# Remove the cloned repo, if you no longer need the editable checkout
+rm -rf ./ubuntu-cast
+
+# Optional: remove the system packages installed for ubuntu-cast, if nothing
+# else on your machine depends on them
+sudo apt remove gstreamer1.0-vaapi python3-gi gir1.2-ayatanaappindicator3-0.1
 ```
 
-`gstreamer1.0-vaapi` enables hardware H.264 encoding (Intel/AMD); without it the
-pipeline falls back to software x264. Run `ubuntu-cast doctor` — every
-requirement is checked and each failure comes with the command that fixes it.
+`uv tool uninstall` only removes the installed command — it doesn't touch the
+git checkout, the desktop launcher, or the saved restore token, so those are
+separate steps above. The `apt remove` step is optional and only worth it if
+you don't use GStreamer/VA-API/PyGObject for anything else.
 
 ## How it works
 
