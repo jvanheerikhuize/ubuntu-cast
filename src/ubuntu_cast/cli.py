@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from typing import Annotated
 
 import typer
 
-from . import __version__, discovery, doctor, ui
+from . import __version__, discovery, doctor, session, ui
 
 app = typer.Typer(
     name="ubuntu-cast",
@@ -17,6 +18,10 @@ app = typer.Typer(
 
 TimeoutOption = Annotated[
     float, typer.Option("--timeout", "-t", help="Seconds to wait for mDNS discovery.")
+]
+
+AudioOnlyOption = Annotated[
+    bool, typer.Option("--audio-only", help="Cast desktop audio without the screen.")
 ]
 
 
@@ -41,13 +46,14 @@ def main_callback(
     version: Annotated[
         bool, typer.Option("--version", callback=_version_callback, is_eager=True)
     ] = False,
+    audio_only: AudioOnlyOption = False,
 ) -> None:
     """With no subcommand: discover devices, pick one interactively, and start casting."""
     if ctx.invoked_subcommand is not None:
         return
     devices = _discover_or_exit(timeout=5.0)
     device = ui.pick_device(devices)
-    _start_casting(device)
+    _start_casting(device, audio_only=audio_only)
 
 
 @app.command()
@@ -63,6 +69,7 @@ def start(
         str, typer.Option("--device", "-d", help="Device name (exact or unique prefix).")
     ],
     timeout: TimeoutOption = 5.0,
+    audio_only: AudioOnlyOption = False,
 ) -> None:
     """Start casting to a named device (non-interactive, scriptable)."""
     found = _discover_or_exit(timeout)
@@ -71,7 +78,7 @@ def start(
         ui.error_console.print(f"No device matching '{device}'.")
         ui.console.print(ui.device_table(found))
         raise typer.Exit(code=1)
-    _start_casting(match)
+    _start_casting(match, audio_only=audio_only)
 
 
 @app.command(name="doctor")
@@ -85,14 +92,43 @@ def doctor_command() -> None:
     ui.console.print("[green]Ready to cast.[/green]")
 
 
-def _start_casting(device: discovery.CastDevice) -> None:
+def _start_casting(device: discovery.CastDevice, audio_only: bool = False) -> None:
     ui.console.print(
         f"Selected [bold cyan]{device.name}[/bold cyan] [dim]({device.model}, {device.host})[/dim]"
     )
+    if not audio_only:
+        ui.console.print(
+            "[yellow]Screen mirroring isn't implemented yet — it lands in Phase 3 "
+            "(see INTENT.md). Try audio in the meantime: ubuntu-cast start -d "
+            f"'{device.name}' --audio-only[/yellow]"
+        )
+        return
+    _cast_audio(device)
+
+
+def _cast_audio(device: discovery.CastDevice) -> None:
+    cast_session = session.AudioSession(device)
+    try:
+        with ui.console.status(f"[bold]Connecting to {device.name}…[/bold]"):
+            url = cast_session.start()
+    except Exception as error:
+        cast_session.stop()
+        ui.error_console.print(f"Could not start the audio cast: {error}")
+        raise typer.Exit(code=1) from error
     ui.console.print(
-        "[yellow]Screen mirroring isn't implemented yet — it lands in Phase 3 "
-        "(see INTENT.md). Discovery and device selection are working.[/yellow]"
+        f"[green]♪ Casting desktop audio[/green] to [bold cyan]{device.name}[/bold cyan] "
+        f"[dim]({url})[/dim]"
     )
+    ui.console.print("[dim]Press Ctrl+C to stop.[/dim]")
+    try:
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        with ui.console.status("[bold]Stopping…[/bold]"):
+            cast_session.stop()
+        ui.console.print("Stopped.")
 
 
 def main() -> None:
