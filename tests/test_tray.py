@@ -198,3 +198,49 @@ def test_stopping_clears_session_and_rebuilds_menu(monkeypatch):
     assert stopped == [DEVICE]
     labels = [item.label for item in app.menu.get_children()]
     assert "Cast to woonkamer TV" in labels
+
+
+def test_start_failure_notifies_and_reverts_menu(monkeypatch):
+    notified = []
+    monkeypatch.setattr(tray.subprocess, "run", lambda *a, **k: notified.append(a[0]))
+    monkeypatch.setattr(
+        tray.session,
+        "ScreenSession",
+        lambda device: types.SimpleNamespace(
+            start=lambda: (_ for _ in ()).throw(RuntimeError("boom")), stop=lambda: None
+        ),
+    )
+    app = make_app([DEVICE])
+    cast_item = next(i for i in app.menu.get_children() if i.label == "Cast to woonkamer TV")
+    cast_item.activate()
+    labels = [item.label for item in app.menu.get_children()]
+    assert "Cast to woonkamer TV" in labels
+    assert "Stop casting" not in labels
+    assert notified and "boom" in notified[0][-1]
+
+
+def test_stop_failure_notifies(monkeypatch):
+    notified = []
+    monkeypatch.setattr(tray.subprocess, "run", lambda *a, **k: notified.append(a[0]))
+    monkeypatch.setattr(
+        tray.session,
+        "ScreenSession",
+        lambda device: types.SimpleNamespace(
+            start=lambda: None, stop=lambda: (_ for _ in ()).throw(RuntimeError("stop failed"))
+        ),
+    )
+    app = make_app([DEVICE])
+    cast_item = next(i for i in app.menu.get_children() if i.label == "Cast to woonkamer TV")
+    cast_item.activate()
+    stop_item = next(i for i in app.menu.get_children() if i.label == "Stop casting")
+    stop_item.activate()
+    assert notified and "stop failed" in notified[0][-1]
+
+
+def test_notify_error_ignores_missing_notify_send(monkeypatch):
+    def raise_missing(*_args, **_kwargs):
+        raise FileNotFoundError()
+
+    monkeypatch.setattr(tray.subprocess, "run", raise_missing)
+    app = make_app([DEVICE])
+    assert app._notify_error("title", "message") is False

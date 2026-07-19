@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -144,15 +146,16 @@ class TrayApp:
     def _start_worker(self, cast_session: session.AudioSession | session.ScreenSession) -> None:
         try:
             cast_session.start()
-        except Exception:
-            self._glib.idle_add(self._on_start_failed)
+        except Exception as error:
+            self._glib.idle_add(self._on_start_failed, str(error))
             return
         self._glib.idle_add(self._rebuild_menu)
 
-    def _on_start_failed(self) -> bool:
+    def _on_start_failed(self, message: str) -> bool:
         self._session = None
         self._active_device = None
         self._rebuild_menu()
+        self._notify_error("Ubuntu Cast", f"Could not start casting: {message}")
         return False
 
     def _on_stop(self, _widget: Any = None) -> None:
@@ -162,7 +165,18 @@ class TrayApp:
         self._session = None
         self._active_device = None
         self._rebuild_menu()
-        threading.Thread(target=cast_session.stop, daemon=True).start()
+        threading.Thread(target=self._stop_worker, args=(cast_session,), daemon=True).start()
+
+    def _stop_worker(self, cast_session: session.AudioSession | session.ScreenSession) -> None:
+        try:
+            cast_session.stop()
+        except Exception as error:
+            self._glib.idle_add(self._notify_error, "Ubuntu Cast", f"Error stopping cast: {error}")
+
+    def _notify_error(self, title: str, message: str) -> bool:
+        with contextlib.suppress(FileNotFoundError):
+            subprocess.run(["notify-send", "--icon=dialog-error", title, message], check=False)
+        return False
 
     def _on_refresh(self, _widget: Any) -> None:
         self.devices = discovery.discover(timeout=5.0)
