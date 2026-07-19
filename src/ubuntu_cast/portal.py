@@ -26,6 +26,9 @@ _SCREENCAST = DBusAddress(
 
 SOURCE_MONITOR = 1
 CURSOR_EMBEDDED = 2
+# persist_mode: keep the user's screen selection until they revoke it, so a
+# restore_token can skip the share dialog on later runs.
+PERSIST_UNTIL_REVOKED = 2
 
 _REPLY_TIMEOUT = 30.0
 # Start() blocks on the human answering the share dialog — give them time.
@@ -42,21 +45,38 @@ def request_path(unique_name: str, token: str) -> str:
     return f"{_PORTAL_PATH}/request/{sender}/{token}"
 
 
+def select_sources_options(restore_token: str | None) -> dict:
+    """SelectSources options; a valid restore token skips the share dialog."""
+    options = {
+        "types": ("u", SOURCE_MONITOR),
+        "cursor_mode": ("u", CURSOR_EMBEDDED),
+        "persist_mode": ("u", PERSIST_UNTIL_REVOKED),
+    }
+    if restore_token:
+        # The portal ignores unknown/revoked tokens and shows the dialog.
+        options["restore_token"] = ("s", restore_token)
+    return options
+
+
 class ScreenCastSession:
     """One portal ScreenCast session; keep it open for the capture's lifetime."""
 
     def __init__(self) -> None:
         self._conn: DBusConnection | None = None
         self._session_handle: str | None = None
+        # Set by open(); persist it to skip the share dialog next run.
+        self.restore_token: str | None = None
         # jeepney's blocking connection is not thread-safe; HTTP handler
         # threads call open_pipewire_fd() while the main thread may close().
         self._lock = threading.Lock()
 
-    def open(self) -> int:
+    def open(self, restore_token: str | None = None) -> int:
         """Run the portal handshake; shows the system share dialog.
 
-        Returns the PipeWire node id of the approved stream. Call
-        open_pipewire_fd() for a connection fd to read it with.
+        A restore_token from an earlier approved run skips the dialog. Returns
+        the PipeWire node id of the approved stream; self.restore_token then
+        holds the (possibly renewed) token to persist for the next run. Call
+        open_pipewire_fd() for a connection fd to read the stream with.
         """
         self._conn = open_dbus_connection(bus="SESSION", enable_fds=True)
         session_token = "ubuntu_cast_" + secrets.token_hex(4)
@@ -69,17 +89,12 @@ class ScreenCastSession:
         self._request(
             "SelectSources",
             "oa{sv}",
-            (
-                self._session_handle,
-                {
-                    "types": ("u", SOURCE_MONITOR),
-                    "cursor_mode": ("u", CURSOR_EMBEDDED),
-                },
-            ),
+            (self._session_handle, select_sources_options(restore_token)),
         )
         results = self._request(
             "Start", "osa{sv}", (self._session_handle, "", {}), timeout=_DIALOG_TIMEOUT
         )
+        self.restore_token = results.get("restore_token", (None, None))[1]
         streams = results["streams"][1]
         if not streams:
             raise PortalError("the portal approved the session but returned no streams")
