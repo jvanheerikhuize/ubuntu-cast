@@ -18,3 +18,13 @@ def test_select_sources_asks_the_portal_to_persist_the_selection():
 def test_select_sources_passes_a_saved_token_to_skip_the_dialog():
     options = portal.select_sources_options("tok-123")
     assert options["restore_token"] == ("s", "tok-123")
+
+
+def test_select_sources_embeds_the_cursor_by_default():
+    options = portal.select_sources_options(None)
+    assert options["cursor_mode"] == ("u", portal.CURSOR_EMBEDDED)
+
+
+def test_no_cursor_asks_the_portal_to_hide_the_pointer():
+    options = portal.select_sources_options(None, show_cursor=False)
+    assert options["cursor_mode"] == ("u", portal.CURSOR_HIDDEN)

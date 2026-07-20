@@ -1,6 +1,6 @@
 import pytest
 
-from ubuntu_cast import video
+from ubuntu_cast import quality, video
 
 
 def _available(*names: str):
@@ -74,3 +74,50 @@ def test_fmp4_stream_command_pins_a_constant_framerate():
     caps = command[command.index("videorate") + 2]
     assert "framerate=30/1" in caps
     assert command.index("videorate") < command.index("x264enc")
+
+
+def test_no_hw_skips_the_vaapi_encoder_even_when_it_is_installed(monkeypatch):
+    monkeypatch.setattr(video, "_have_element", _available("vaapih264enc", "x264enc"))
+    encoder = video.pick_h264_encoder(quality.resolve("balanced", hardware=False))
+    assert encoder[0] == "x264enc"
+
+
+def test_no_hw_error_points_at_the_flag_rather_than_vaapi(monkeypatch):
+    monkeypatch.setattr(video, "_have_element", _available())
+    with pytest.raises(RuntimeError, match="--no-hw"):
+        video.pick_h264_encoder(quality.resolve("balanced", hardware=False))
+
+
+def test_encoder_carries_the_requested_bitrate_and_keyframe_interval(monkeypatch):
+    monkeypatch.setattr(video, "_have_element", _available("x264enc"))
+    encoder = video.pick_h264_encoder(quality.resolve("balanced", fps=60, video_bitrate=12000))
+    assert "bitrate=12000" in encoder
+    # Keyframes every two seconds — at 60 fps that's every 120 frames.
+    assert "key-int-max=120" in encoder
+
+
+def test_caps_carry_the_requested_resolution_and_framerate():
+    settings = quality.resolve("balanced", resolution="720p", fps=24)
+    command = video.fmp4_stream_command(7, 42, "m", ["x264enc"], ["avenc_aac"], settings)
+    caps = command[command.index("videorate") + 2]
+    assert "framerate=24/1" in caps
+    assert "width=1280" in caps
+    assert "height=720" in caps
+
+
+def test_a_resolution_adds_letterboxed_scaling_before_the_rate_conversion():
+    command = video.fmp4_stream_command(
+        7, 42, "m", ["x264enc"], ["avenc_aac"], quality.resolve("balanced", resolution="720p")
+    )
+    assert "videoscale" in command
+    assert "add-borders=true" in command
+    assert command.index("videoscale") < command.index("videorate")
+
+
+def test_native_resolution_leaves_the_frames_unscaled():
+    command = video.fmp4_stream_command(
+        7, 42, "m", ["x264enc"], ["avenc_aac"], quality.resolve("balanced", resolution="native")
+    )
+    assert "videoscale" not in command
+    caps = command[command.index("videorate") + 2]
+    assert "width=" not in caps

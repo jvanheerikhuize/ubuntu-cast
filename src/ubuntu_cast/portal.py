@@ -25,6 +25,7 @@ _SCREENCAST = DBusAddress(
 )
 
 SOURCE_MONITOR = 1
+CURSOR_HIDDEN = 1
 CURSOR_EMBEDDED = 2
 # persist_mode: keep the user's screen selection until they revoke it, so a
 # restore_token can skip the share dialog on later runs.
@@ -45,11 +46,11 @@ def request_path(unique_name: str, token: str) -> str:
     return f"{_PORTAL_PATH}/request/{sender}/{token}"
 
 
-def select_sources_options(restore_token: str | None) -> dict:
+def select_sources_options(restore_token: str | None, show_cursor: bool = True) -> dict:
     """SelectSources options; a valid restore token skips the share dialog."""
     options = {
         "types": ("u", SOURCE_MONITOR),
-        "cursor_mode": ("u", CURSOR_EMBEDDED),
+        "cursor_mode": ("u", CURSOR_EMBEDDED if show_cursor else CURSOR_HIDDEN),
         "persist_mode": ("u", PERSIST_UNTIL_REVOKED),
     }
     if restore_token:
@@ -70,7 +71,7 @@ class ScreenCastSession:
         # threads call open_pipewire_fd() while the main thread may close().
         self._lock = threading.Lock()
 
-    def open(self, restore_token: str | None = None) -> int:
+    def open(self, restore_token: str | None = None, show_cursor: bool = True) -> int:
         """Run the portal handshake; shows the system share dialog.
 
         A restore_token from an earlier approved run skips the dialog. Returns
@@ -89,7 +90,7 @@ class ScreenCastSession:
         self._request(
             "SelectSources",
             "oa{sv}",
-            (self._session_handle, select_sources_options(restore_token)),
+            (self._session_handle, select_sources_options(restore_token, show_cursor)),
         )
         results = self._request(
             "Start", "osa{sv}", (self._session_handle, "", {}), timeout=_DIALOG_TIMEOUT
