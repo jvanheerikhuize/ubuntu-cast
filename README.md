@@ -29,6 +29,8 @@ $ ubuntu-cast
 | `ubuntu-cast devices` | List Cast devices on the local network |
 | `ubuntu-cast start -d "woonkamer TV"` | Non-interactive start (device name or unique prefix) |
 | `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
+| `ubuntu-cast start -d TV -q high` | Quality preset: `low`, `balanced` (default), or `high` |
+| `ubuntu-cast stop` | Stop the cast running in another terminal or in the tray |
 | `ubuntu-cast doctor` | Check that this machine is ready to cast |
 | `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
 | `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
@@ -38,8 +40,8 @@ The first screen cast pops the system screen-share dialog — pick the monitor t
 mirror and approve. Your choice is remembered (a portal restore token in
 `~/.local/state/ubuntu-cast/`), so later casts start with **no dialog at all**.
 Revoke it any time under GNOME Settings → Apps → Screen Sharing, or delete the
-token file. Stop casting with **Ctrl+C**; the Chromecast returns to its idle
-screen.
+token file. Stop casting with **Ctrl+C**, or `ubuntu-cast stop` from any
+other terminal; the Chromecast returns to its idle screen.
 
 Expect **2–5 seconds of delay**: the Chromecast buffers its HTTP stream. That's
 fine for movies, photos, and presentations — not for gaming.
@@ -125,6 +127,8 @@ Run from the checkout instead of a `uv tool install`: `uv sync`, then
 | `ubuntu-cast devices` | List Cast devices on the local network |
 | `ubuntu-cast start -d "woonkamer TV"` | Non-interactive start (device name or unique prefix) |
 | `ubuntu-cast start -d TV --audio-only` | Cast desktop audio without the screen |
+| `ubuntu-cast start -d TV -q high` | Quality preset: `low`, `balanced` (default), or `high` |
+| `ubuntu-cast stop` | Stop the cast running in another terminal or in the tray |
 | `ubuntu-cast doctor` | Check that this machine is ready to cast |
 | `ubuntu-cast install-launcher` | Add an "Ubuntu Cast" launcher to the GNOME app grid |
 | `ubuntu-cast tray` | Show a GNOME top-bar icon to start/stop casting, no terminal needed |
@@ -134,8 +138,8 @@ The first screen cast pops the system screen-share dialog — pick the monitor t
 mirror and approve. Your choice is remembered (a portal restore token in
 `~/.local/state/ubuntu-cast/`), so later casts start with **no dialog at all**.
 Revoke it any time under GNOME Settings → Apps → Screen Sharing, or delete the
-token file. Stop casting with **Ctrl+C**; the Chromecast returns to its idle
-screen.
+token file. Stop casting with **Ctrl+C**, or `ubuntu-cast stop` from any
+other terminal; the Chromecast returns to its idle screen.
 
 Expect **2–5 seconds of delay**: the Chromecast buffers its HTTP stream. That's
 fine for movies, photos, and presentations — not for gaming.
