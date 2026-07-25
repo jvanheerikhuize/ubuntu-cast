@@ -201,3 +201,9 @@ tray indicator) are done; remaining ideas: quality presets, deb packaging.
 ## License
 
 [MIT](LICENSE)
+
+## Roadmap
+
+See [branch: roadmap-hardening](https://github.com/jvanheerikhuize/ubunutu-cast/tree/roadmap-hardening) for 6-phase rollout: quality flags, auth improvements, tray hardening.
+
+---
