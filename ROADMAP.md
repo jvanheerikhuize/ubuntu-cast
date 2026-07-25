@@ -31,10 +31,9 @@ below them.
   tests. This covers the first two items of Phase 8 below.
 - **`worktree-roadmap-hardening`** — the roadmap draft this file supersedes.
 
-⚠️ **Both branches delete `PURPOSE.md`.** That conflicts with the workspace
-convention (`/repo-audit` treats `PURPOSE.md` as required) and with the corrected
-file now on `docs/purpose-and-roadmap`. Resolve deliberately when merging —
-keeping the rewritten `PURPOSE.md` is the intended outcome.
+Note: `worktree-roadmap-hardening` adds its roadmap to `INTENT.md`. Once this
+file exists that content is duplicated in two places — fold it into `ROADMAP.md`
+and keep `INTENT.md` focused on technical approach.
 
 ## Phase 7 — Hardening
 
