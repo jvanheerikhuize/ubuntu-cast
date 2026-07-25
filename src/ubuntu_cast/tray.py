@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import signal
 import subprocess
 import sys
 import threading
@@ -179,11 +180,14 @@ class TrayApp:
         audio_only: bool,
     ) -> None:
         try:
-            cast_session.start()
+            url = cast_session.start()
         except Exception as error:
             self._glib.idle_add(self._on_start_failed, str(error))
             return
         state.save_last_device(device.name, audio_only)
+        # SIGUSR1, not SIGINT: `ubuntu-cast stop` should end the cast and leave
+        # the tray icon running.
+        state.save_session(device.name, audio_only, url=url, stop_signal=signal.SIGUSR1)
         self._glib.idle_add(self._rebuild_menu)
 
     def _on_start_failed(self, message: str) -> bool:
@@ -202,7 +206,23 @@ class TrayApp:
         self._rebuild_menu()
         threading.Thread(target=self._stop_worker, args=(cast_session,), daemon=True).start()
 
+    def install_stop_signal(self) -> None:
+        """Let `ubuntu-cast stop` end a tray-owned cast from another process.
+
+        unix_signal_add, not signal.signal: Python's own handlers only run
+        between bytecodes, and gtk.main() blocks inside C for the whole session.
+        """
+        add = getattr(self._glib, "unix_signal_add", None)
+        if add is None:  # older GLib bindings — the tray menu still stops casts
+            return
+        add(self._glib.PRIORITY_DEFAULT, signal.SIGUSR1, self._on_stop_signal)
+
+    def _on_stop_signal(self, *_args: Any) -> bool:
+        self._on_stop()
+        return True  # keep the handler installed for the next stop
+
     def _stop_worker(self, cast_session: session.AudioSession | session.ScreenSession) -> None:
+        state.clear_session()
         try:
             cast_session.stop()
         except Exception as error:
@@ -227,5 +247,6 @@ def run(timeout: float = 5.0) -> None:
     indicator_module, gtk, glib = _import_indicator()
     devices = discovery.discover(timeout=timeout)
     app = TrayApp(indicator_module, gtk, glib, devices)
+    app.install_stop_signal()
     del app  # kept alive by the GTK menu's signal connections
     gtk.main()

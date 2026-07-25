@@ -9,6 +9,7 @@ import pychromecast
 
 from . import audio, portal, state, stream, video
 from .discovery import CastDevice
+from .quality import DEFAULT, Quality
 
 
 def _connect(device: CastDevice) -> pychromecast.Chromecast:
@@ -36,9 +37,9 @@ def _disconnect(cast: pychromecast.Chromecast) -> None:
 class AudioSession:
     """Casts the desktop's audio (default sink monitor) to one device."""
 
-    def __init__(self, device: CastDevice, bitrate: int = 192) -> None:
+    def __init__(self, device: CastDevice, quality: Quality = DEFAULT) -> None:
         self.device = device
-        self.bitrate = bitrate
+        self.quality = quality
         self.url: str | None = None
         self._server: stream.StreamServer | None = None
         self._cast: pychromecast.Chromecast | None = None
@@ -51,7 +52,7 @@ class AudioSession:
     def start(self) -> str:
         """Start streaming and tell the device to play; returns the stream URL."""
         monitor = audio.default_sink_monitor()
-        command = audio.mp3_stream_command(monitor, self.bitrate)
+        command = audio.mp3_stream_command(monitor, self.quality.audio_bitrate)
         self._server = stream.start(command)
         ip = stream.local_ip_for(self.device.host)
         self.url = f"http://{ip}:{self._server.server_port}{stream.STREAM_PATH}"
@@ -74,9 +75,9 @@ class AudioSession:
 class ScreenSession:
     """Casts the desktop's screen, with its audio, to one device."""
 
-    def __init__(self, device: CastDevice, audio_bitrate: int = 192) -> None:
+    def __init__(self, device: CastDevice, quality: Quality = DEFAULT) -> None:
         self.device = device
-        self.audio_bitrate = audio_bitrate
+        self.quality = quality
         self.url: str | None = None
         self._server: stream.StreamServer | None = None
         self._cast: pychromecast.Chromecast | None = None
@@ -95,21 +96,26 @@ class ScreenSession:
         cancels it. Encoders are checked first so a missing one fails fast
         without popping the dialog.
         """
-        h264_encoder = video.pick_h264_encoder()
-        aac_encoder = video.pick_aac_encoder(self.audio_bitrate)
+        h264_encoder = video.pick_h264_encoder(self.quality)
+        aac_encoder = video.pick_aac_encoder(self.quality.audio_bitrate)
         monitor = audio.default_sink_monitor()
 
         portal_session = portal.ScreenCastSession()
         self._portal = portal_session
         # A token from an earlier approved cast skips the share dialog.
-        node_id = portal_session.open(restore_token=state.load_restore_token())
+        node_id = portal_session.open(
+            restore_token=state.load_restore_token(),
+            show_cursor=self.quality.show_cursor,
+        )
         state.save_restore_token(portal_session.restore_token)
 
         def make_command() -> tuple[list[str], tuple[int, ...]]:
             # A PipeWire fd is a single-consumer socket: each pipeline (the
             # Chromecast reconnects, browsers probe) needs its own fresh one.
             fd = portal_session.open_pipewire_fd()
-            command = video.fmp4_stream_command(fd, node_id, monitor, h264_encoder, aac_encoder)
+            command = video.fmp4_stream_command(
+                fd, node_id, monitor, h264_encoder, aac_encoder, self.quality
+            )
             return command, (fd,)
 
         self._server = stream.start(command_factory=make_command, content_type="video/mp4")
