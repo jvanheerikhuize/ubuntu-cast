@@ -196,7 +196,9 @@ uv run ruff format . # format
 
 See [INTENT.md](INTENT.md) for the full plan. Phases 1–6 (discovery, audio-only
 casting, screen + audio casting, performance + live status UI, seamless launch,
-tray indicator) are done; remaining ideas: quality presets, deb packaging.
+tray indicator) are done; Phases 7–9 there cover what's next — stream
+authentication and other hardening, quality flags, `stop`, window capture, and
+deb packaging.
 
 ## License
 

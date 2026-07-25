@@ -98,16 +98,87 @@ Quality flags on `start`: `--resolution 1080p|720p`, `--fps 30|60`,
 
 ## Roadmap
 
-- **Phase 0 — Bootstrap.** Repo, `uv` project layout, ruff + pytest, CI stub. ✅ (this PR)
+- **Phase 0 — Bootstrap.** Repo, `uv` project layout, ruff + pytest, CI stub. ✅
 - **Phase 1 — Discovery.** `devices` command with a rich table (name, model, IP);
-  interactive picker component.
+  interactive picker component. ✅
 - **Phase 2 — Audio-only casting.** Simplest end-to-end slice: PipeWire monitor →
-  AAC → HTTP → cast. Proves the serve-and-cast plumbing without portal complexity.
+  AAC → HTTP → cast. Proves the serve-and-cast plumbing without portal complexity. ✅
 - **Phase 3 — Screen + audio.** XDG portal ScreenCast negotiation, combined
-  GStreamer pipeline, fMP4 live mux. The core deliverable.
-- **Phase 4 — Polish.** Live status UI, keyboard controls (stop/volume/pause),
-  `doctor` command, friendly error catalog, quality presets.
-- **Phase 5 — Packaging.** pipx/uv install docs, man page, maybe a .deb.
+  GStreamer pipeline, fMP4 live mux. The core deliverable. ✅
+- **Phase 4 — Polish.** Live status UI, `doctor` command, friendly error catalog. ✅
+- **Phase 5 — Seamless launch.** Portal restore token, GNOME `.desktop` launcher. ✅
+- **Phase 6 — Tray indicator.** GNOME top-bar icon, last-device recall, failure
+  notifications. ✅
+
+### Phase 7 — Hardening
+
+The stream server was built for "it works on my desk"; these are the gaps that
+matter once it runs on someone else's network.
+
+- **Authenticate the stream.** `StreamServer` binds `0.0.0.0` and serves
+  `/stream` to anyone who asks — on a café or office LAN that is an open window
+  onto the user's screen. The Default Media Receiver can't send auth headers, so
+  the fix is two cheap layers: an unguessable per-session path
+  (`/stream/<secrets.token_urlsafe(16)>`) plus a peer-address check that only
+  admits the Chromecast we handed the URL to. Highest-value item on this list.
+- **Cap concurrent pipelines.** Every `GET /stream` spawns an encoder
+  subprocess. A port scanner (or a stuck client reconnect loop) can spawn them
+  without bound, each one pulling a fresh PipeWire fd. Refuse with 503 past a
+  small limit.
+- **Don't hand a hung encoder a free pass.** In `stream.py` the teardown runs
+  `pipeline.terminate(); pipeline.wait(timeout=5)` inside `finally` — a pipeline
+  that ignores SIGTERM raises `TimeoutExpired` out of the handler and is never
+  killed. Follow up with `kill()` and a second wait.
+- **Move the pipeline log out of `/tmp`.** `ubuntu-cast-pipeline.log` is a
+  predictable path opened with `"ab"`; on a shared machine another user can
+  pre-create it as a symlink and redirect our appends. Write it under
+  `$XDG_STATE_HOME/ubuntu-cast/` instead, and truncate or rotate it so a long
+  cast can't fill the disk.
+- **Tighten state-file permissions.** The restore token is what makes casting
+  prompt-free — anything that can read it can start a capture without the user
+  seeing a dialog. Create the state dir `0700` and the token file `0600`.
+- **Idle auto-stop.** If the Chromecast drops off the network the session stays
+  up, capturing and encoding forever. Stop (or notify) after the stream has had
+  no active client for ~30 s.
+- **Interface selection.** `local_ip_for` picks whatever route the kernel offers,
+  which on a VPN is often an address the Chromecast can't reach. Detect the
+  mismatch in `doctor` and allow `--bind-address`.
+- **CI that actually runs.** Phase 0 promised a stub, but there's no
+  `.github/workflows/` — add ruff + pytest on 3.12/3.13 so the suite gates PRs.
+
+### Phase 8 — Features
+
+- **Quality flags.** `--resolution`, `--fps`, `--bitrate`, `--hw/--no-hw` from the
+  CLI table above are still unimplemented: `video.py` hardcodes 8000 kb/s and
+  pins 30 fps, with no scaling. Presets (`--quality low|balanced|high`) on top.
+- **`ubuntu-cast stop`.** The CLI table lists it and nothing implements it —
+  today the only ways to stop are Ctrl+C in the owning terminal or the tray menu.
+  Needs a session pidfile/socket in the state dir, which also unlocks scripting.
+- **Keyboard controls.** The mockup at the top of this file advertises
+  `[q] stop  [v] volume  [p] pause`; the live status panel is read-only so far.
+- **Reconnect on blips.** A Wi-Fi hiccup ends the cast. Retry the media
+  controller a few times before giving up, and say so in the status line.
+- **Window and region capture.** The portal can hand back a single window or a
+  chosen region, not just a whole monitor — the obvious ask for presentations.
+  `--window` / `--region`, with the choice remembered like the monitor is.
+- **Cursor toggle.** The portal's cursor mode is negotiable; `--no-cursor` is a
+  one-line win for screen recordings and demos.
+- **Cast to speaker groups.** pychromecast surfaces multi-device groups; useful
+  in audio-only mode and currently invisible in the picker.
+- **Config file.** `$XDG_CONFIG_HOME/ubuntu-cast/config.toml` for default device,
+  quality, and audio-only preference, so the flags don't have to be retyped.
+- **`doctor --json`.** Machine-readable diagnostics make bug reports a paste
+  instead of a screenshot.
+- **An end-to-end test.** The suite unit-tests each module but never runs the
+  serve-and-cast loop. A fake Chromecast (HTTP client + stub media controller)
+  against a real `StreamServer` would catch the wiring regressions unit tests
+  can't see.
+
+### Phase 9 — Distribution
+
+- pipx/uv install docs ✅, man page, shell completions (Typer generates them).
+- A `.deb` or PPA so the GStreamer/PyGObject system deps come along instead of
+  being an `apt install` line in the README.
 
 ## Known risks
 
